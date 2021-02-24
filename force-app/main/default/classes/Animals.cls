@@ -3,12 +3,30 @@ public inherited sharing class Animals {
     private static final String URL = 'https://th-apex-http-callout.herokuapp.com/animals';
 
     public static List<Animal__c>  getAnimalsFromURL() {
-        JSONAnimals jsonAnimals = (JSONAnimals) HttpUtils.get(URl, JSONAnimals.class);
-        return objectsMapper(jsonAnimals.animals);
+        Object value = getValueFromCache(URL);
+        if (value != null) {
+            JSONAnimals jsonAnimals = (JSONAnimals) JSON.deserialize((String) value, JSONAnimals.class);
+            return objectsMapper(jsonAnimals.animals);
+        } else {
+            JSONAnimals jsonAnimals = (JSONAnimals) HttpUtils.get(URl, JSONAnimals.class); 
+            List<Animal__c> res = objectsMapper(jsonAnimals.animals);
+            putValueInCache(URL, jsonAnimals);
+            return res;
+        }
     }
 
     public static Animal__c  getAnimalFromURL(String id) {
-        return objectMapper((JSONAnimal) HttpUtils.get(URl + '/' + id, JSONAnimal.class));
+        String url = URL + '/' + id;
+        Object value = getValueFromCache(url);
+        if (value != null) {
+            JSONAnimal jsonAnimal = (JSONAnimal) JSON.deserialize((String)value, JSONAnimal.class);
+            return objectMapper(jsonAnimal);
+        } else {
+            JSONAnimal jsonAnimal = (JSONAnimal) HttpUtils.get(url, JSONAnimal.class);
+            Animal__c animal = objectMapper(jsonAnimal);
+            putValueInCache(url, jsonAnimal);
+            return animal;
+        }      
     }
 
     private static Animal__c objectMapper(JSONAnimal jsonAnimal) {
@@ -26,6 +44,18 @@ public inherited sharing class Animals {
             res.add(objectMapper(new JSOnAnimal(name)));
         }
         return res;
+    }
+
+    private static Object getValueFromCache(String key) {
+        List<HttpCache__c> dbCach = [SELECT Key__c, Value__c, Time__c FROM HttpCache__c WHERE Key__c =: key];
+        if (dbCach.size() != 0) {
+            return dbCach.get(0).Value__c;
+        }
+        return null;
+    }
+
+    private static void putValueInCache(String key, Object value) {
+        insert new HttpCache__c(Key__c=key, Value__c=JSON.serialize(value, false), Time__c=DateTime.now());
     }
 
     //{"animals":["majestic badger","fluffy bunny","scary bear","chicken"]}
